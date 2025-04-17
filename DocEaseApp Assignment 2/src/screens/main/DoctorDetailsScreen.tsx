@@ -3,69 +3,262 @@ import {
   View,
   StyleSheet,
   ScrollView,
-  ActivityIndicator,
+  SafeAreaView,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
 import {
-  Avatar,
   Text,
   Button,
-  Card,
-  Divider,
-  IconButton,
-  Chip,
+  Avatar,
   useTheme,
+  Divider,
   Surface,
+  IconButton,
+  ActivityIndicator,
+  Portal,
+  Modal,
+  TextInput,
+  Card,
 } from 'react-native-paper';
-import { Doctor } from '../../types/AppointmentTypes';
-import { appointmentService } from '../../utils/appointmentService';
+import { auth } from '../../firebase/config';
 
 interface DoctorDetailsScreenProps {
+  route: {
+    params: {
+      doctorId: string;
+    };
+  };
   navigation: any;
-  route: any;
 }
 
+interface Doctor {
+  id: string;
+  name: string;
+  specialization: string;
+  experience: number;
+  rating: number;
+  availability?: string;
+  imageUrl?: string;
+  hospital?: string;
+  fees?: number;
+  bio?: string;
+  education?: string[];
+  languages?: string[];
+  reviews?: number;
+  address?: string;
+}
+
+interface TimeSlot {
+  id: string;
+  time: string;
+  available: boolean;
+}
+
+// Mock doctors data
+const MOCK_DOCTORS: Record<string, Doctor> = {
+  '1': {
+    id: '1',
+    name: 'Dr. Sarah Johnson',
+    specialization: 'Cardiologist',
+    experience: 15,
+    rating: 4.8,
+    availability: 'Available Today',
+    hospital: 'City Medical Center',
+    fees: 120,
+    imageUrl: 'https://randomuser.me/api/portraits/women/33.jpg',
+    bio: 'Dr. Sarah Johnson is a board-certified cardiologist with over 15 years of experience in treating heart conditions. She specializes in preventive cardiology and heart disease management.',
+    education: ['MD, Harvard Medical School', 'Board Certified in Cardiology'],
+    languages: ['English', 'Spanish'],
+    reviews: 72,
+    address: '123 Medical Plaza, Suite 500, City, ST 12345',
+  },
+  '2': {
+    id: '2',
+    name: 'Dr. Michael Chen',
+    specialization: 'Dermatologist',
+    experience: 10,
+    rating: 4.7,
+    availability: 'Next Available: Tomorrow',
+    hospital: 'Dermatology Clinic',
+    fees: 150,
+    imageUrl: 'https://randomuser.me/api/portraits/men/32.jpg',
+    bio: 'Dr. Michael Chen is a dermatologist specializing in medical and cosmetic dermatology. He has expertise in treating skin conditions including acne, eczema, and psoriasis.',
+    education: ['MD, Stanford University', 'Residency in Dermatology, UCLA'],
+    languages: ['English', 'Mandarin'],
+    reviews: 58,
+    address: '456 Skin Care Blvd, City, ST 12345',
+  },
+  '3': {
+    id: '3',
+    name: 'Dr. Emily Williams',
+    specialization: 'Pediatrician',
+    experience: 12,
+    rating: 4.9,
+    availability: 'Available Today',
+    hospital: 'Children\'s Hospital',
+    fees: 100,
+    imageUrl: 'https://randomuser.me/api/portraits/women/32.jpg',
+    bio: 'Dr. Emily Williams is a compassionate pediatrician dedicated to providing comprehensive care for children from birth through adolescence.',
+    education: ['MD, Johns Hopkins University', 'Fellowship in Pediatrics'],
+    languages: ['English', 'French'],
+    reviews: 85,
+    address: '789 Children\'s Way, City, ST 12345',
+  },
+  '4': {
+    id: '4',
+    name: 'Dr. David Rodriguez',
+    specialization: 'Neurologist',
+    experience: 18,
+    rating: 4.6,
+    availability: 'Available Today',
+    hospital: 'Neurology Center',
+    fees: 200,
+    imageUrl: 'https://randomuser.me/api/portraits/men/45.jpg',
+    bio: 'Dr. David Rodriguez is a neurologist with expertise in diagnosing and treating disorders of the nervous system, including headaches, epilepsy, and stroke.',
+    education: ['MD, University of Pennsylvania', 'Neurology Residency, Mayo Clinic'],
+    languages: ['English', 'Spanish'],
+    reviews: 64,
+    address: '321 Brain Health Dr, City, ST 12345',
+  },
+  '5': {
+    id: '5',
+    name: 'Dr. Jennifer Martinez',
+    specialization: 'Orthopedic',
+    experience: 14,
+    rating: 4.5,
+    availability: 'Next Available: Tomorrow',
+    hospital: 'Orthopedic Specialists',
+    fees: 180,
+    imageUrl: 'https://randomuser.me/api/portraits/women/45.jpg',
+    bio: 'Dr. Jennifer Martinez is an orthopedic surgeon specializing in sports medicine and joint replacement surgery. She is dedicated to helping patients regain mobility and quality of life.',
+    education: ['MD, Columbia University', 'Orthopedic Surgery Residency, Hospital for Special Surgery'],
+    languages: ['English', 'Portuguese'],
+    reviews: 59,
+    address: '555 Joint Health Ave, City, ST 12345',
+  }
+};
+
 const DoctorDetailsScreen: React.FC<DoctorDetailsScreenProps> = ({
-  navigation,
   route,
+  navigation,
 }) => {
   const { doctorId } = route.params;
   const [doctor, setDoctor] = useState<Doctor | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(getFormattedDate(new Date()));
+  const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
+  const [bookingVisible, setBookingVisible] = useState(false);
+  const [bookingReason, setBookingReason] = useState('');
+  const [bookingLoading, setBookingLoading] = useState(false);
+  
   const theme = useTheme();
 
-  // Fetch doctor details
+  // Generate next 5 days for date selection
+  const dateOptions = [...Array(5)].map((_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() + i);
+    return {
+      id: i.toString(),
+      date: getFormattedDate(date),
+      day: date.toLocaleDateString('en-US', { weekday: 'short' }),
+      dateNum: date.getDate(),
+    };
+  });
+
+  // Generate time slots
+  const timeSlots: TimeSlot[] = [
+    { id: '1', time: '09:00 AM', available: true },
+    { id: '2', time: '10:00 AM', available: true },
+    { id: '3', time: '11:00 AM', available: false },
+    { id: '4', time: '12:00 PM', available: true },
+    { id: '5', time: '02:00 PM', available: true },
+    { id: '6', time: '03:00 PM', available: true },
+    { id: '7', time: '04:00 PM', available: false },
+    { id: '8', time: '05:00 PM', available: true },
+  ];
+
+  function getFormattedDate(date: Date): string {
+    return date.toISOString().split('T')[0];
+  }
+
   useEffect(() => {
     const fetchDoctorDetails = async () => {
       try {
         setLoading(true);
-        const doctorData = await appointmentService.getDoctorById(doctorId);
-        setDoctor(doctorData);
+        
+        // Use mock data instead of Firestore
+        setTimeout(() => {
+          const doctorData = MOCK_DOCTORS[doctorId];
+          
+          if (doctorData) {
+            setDoctor(doctorData);
+          } else {
+            // Use a default doctor if ID not found
+            setDoctor({
+              id: doctorId,
+              name: 'Dr. Sarah Johnson',
+              specialization: 'Cardiologist',
+              experience: 15,
+              rating: 4.8,
+              availability: 'Available Today',
+              hospital: 'City Medical Center',
+              fees: 120,
+              bio: 'A dedicated cardiologist with 15 years of experience in treating heart conditions.',
+              education: ['MD, Harvard Medical School', 'Board Certified in Cardiology'],
+              languages: ['English', 'Spanish'],
+              reviews: 72,
+              address: '123 Medical Plaza, Suite 500, City, ST 12345',
+            });
+          }
+          setLoading(false);
+        }, 500); // Simulate loading delay
       } catch (err) {
         console.error('Error fetching doctor details:', err);
-        setError('Failed to load doctor information. Please try again.');
-      } finally {
+        setError('Failed to load doctor details');
         setLoading(false);
       }
     };
 
-    if (doctorId) {
-      fetchDoctorDetails();
-    } else {
-      setError('Doctor ID is missing');
-      setLoading(false);
-    }
+    fetchDoctorDetails();
   }, [doctorId]);
 
-  const handleBookAppointment = () => {
-    navigation.navigate('BookAppointment', { doctorId });
+  const handleBookAppointment = async () => {
+    if (!selectedSlot) {
+      Alert.alert('Please select a time slot');
+      return;
+    }
+
+    if (!auth.currentUser) {
+      Alert.alert('Please log in to book an appointment');
+      navigation.navigate('Login');
+      return;
+    }
+
+    setBookingLoading(true);
+    
+    // Simulate booking process
+    setTimeout(() => {
+      setBookingVisible(false);
+      Alert.alert(
+        'Appointment Booked',
+        `Your appointment with ${doctor?.name} has been booked for ${selectedDate} at ${selectedSlot.time}.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]
+      );
+      setBookingLoading(false);
+    }, 1000);
   };
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={styles.loadingText}>Loading doctor information...</Text>
       </View>
     );
   }
@@ -73,9 +266,8 @@ const DoctorDetailsScreen: React.FC<DoctorDetailsScreenProps> = ({
   if (error || !doctor) {
     return (
       <View style={styles.errorContainer}>
-        <IconButton icon="alert-circle" size={48} iconColor={theme.colors.error} />
         <Text style={styles.errorText}>{error || 'Doctor not found'}</Text>
-        <Button mode="contained" onPress={() => navigation.goBack()} style={styles.errorButton}>
+        <Button mode="contained" onPress={() => navigation.goBack()}>
           Go Back
         </Button>
       </View>
@@ -83,155 +275,232 @@ const DoctorDetailsScreen: React.FC<DoctorDetailsScreenProps> = ({
   }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Doctor Header */}
-      <Surface style={styles.headerContainer} elevation={2}>
-        <View style={styles.profileHeader}>
-          {doctor.profileImage ? (
+    <SafeAreaView style={styles.container}>
+      <ScrollView>
+        <Surface style={styles.header} elevation={2}>
+          <View style={styles.profileHeader}>
             <Avatar.Image
               size={100}
-              source={{ uri: doctor.profileImage }}
-              style={styles.avatar}
+              source={{
+                uri: doctor.imageUrl || 'https://randomuser.me/api/portraits/men/32.jpg',
+              }}
             />
-          ) : (
-            <Avatar.Icon
-              size={100}
-              icon="doctor"
-              color="#fff"
-              style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
-            />
-          )}
-
-          <View style={styles.doctorInfo}>
-            <Text variant="headlineSmall" style={styles.doctorName}>
-              {doctor.name}
-            </Text>
-            <Text variant="titleMedium" style={styles.specialtyText}>
-              {doctor.specialty}
-            </Text>
-            
-            {doctor.qualifications && (
-              <Chip icon="school" style={styles.qualificationChip}>
-                {doctor.qualifications}
-              </Chip>
-            )}
-            
-            <View style={styles.ratingContainer}>
-              <IconButton
-                icon="star"
-                size={20}
-                iconColor={theme.colors.primary}
-                style={styles.ratingIcon}
-              />
-              <Text variant="bodyLarge" style={styles.ratingText}>
-                {doctor.rating?.toFixed(1) || '0.0'}
-              </Text>
-              <Text variant="bodyMedium" style={styles.reviewText}>
-                ({doctor.reviewCount || 0} reviews)
-              </Text>
+            <View style={styles.profileInfo}>
+              <Text variant="titleLarge">{doctor.name}</Text>
+              <Text variant="titleSmall">{doctor.specialization}</Text>
+              <View style={styles.ratingContainer}>
+                <IconButton icon="star" size={20} style={styles.ratingIcon} />
+                <Text variant="bodyMedium">{doctor.rating} • {doctor.reviews} Reviews</Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        <Button
-          mode="contained"
-          icon="calendar-check"
-          onPress={handleBookAppointment}
-          style={styles.bookButton}>
-          Book Appointment
-        </Button>
-      </Surface>
-
-      {/* Doctor Details */}
-      <Card style={styles.detailsCard}>
-        <Card.Content>
-          <View style={styles.detailSection}>
-            <View style={styles.detailHeader}>
-              <IconButton icon="account-details" size={24} />
-              <Text variant="titleMedium">About</Text>
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <Text variant="titleMedium">{doctor.experience}+</Text>
+              <Text variant="bodySmall">Years Exp</Text>
             </View>
-            <Text variant="bodyMedium" style={styles.aboutText}>
-              {doctor.experience ? `${doctor.experience} of experience as a ${doctor.specialty}.` : ''}
-              {'\n\n'}
-              {doctor.qualifications ? `Qualifications: ${doctor.qualifications}` : ''}
-            </Text>
+            <Divider style={styles.verticalDivider} />
+            <View style={styles.statItem}>
+              <Text variant="titleMedium">{doctor.reviews}+</Text>
+              <Text variant="bodySmall">Patients</Text>
+            </View>
+            <Divider style={styles.verticalDivider} />
+            <View style={styles.statItem}>
+              <Text variant="titleMedium">${doctor.fees}</Text>
+              <Text variant="bodySmall">Fee</Text>
+            </View>
           </View>
+        </Surface>
 
-          <Divider style={styles.divider} />
-
-          <View style={styles.detailSection}>
-            <View style={styles.detailHeader}>
-              <IconButton icon="map-marker" size={24} />
-              <Text variant="titleMedium">Location</Text>
-            </View>
-            <Text variant="bodyMedium" style={styles.locationText}>
-              {doctor.clinicAddress || 'Address not available'}
+        <Card style={styles.section}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>About Doctor</Text>
+            <Text variant="bodyMedium" style={styles.bioText}>
+              {doctor.bio}
             </Text>
-          </View>
+          </Card.Content>
+        </Card>
 
-          <Divider style={styles.divider} />
+        <Card style={styles.section}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>Education</Text>
+            {doctor.education?.map((edu, index) => (
+              <View key={index} style={styles.educationItem}>
+                <IconButton icon="school" size={20} />
+                <Text variant="bodyMedium">{edu}</Text>
+              </View>
+            ))}
+          </Card.Content>
+        </Card>
 
-          <View style={styles.detailSection}>
-            <View style={styles.detailHeader}>
-              <IconButton icon="currency-usd" size={24} />
-              <Text variant="titleMedium">Consultation Fee</Text>
-            </View>
-            <Text variant="headlineSmall" style={styles.feeText}>
-              ${doctor.fee || 'N/A'}
+        <Card style={styles.section}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Hospital Address
             </Text>
-          </View>
-
-          <Divider style={styles.divider} />
-
-          <View style={styles.detailSection}>
-            <View style={styles.detailHeader}>
-              <IconButton icon="calendar" size={24} />
-              <Text variant="titleMedium">Availability</Text>
+            <View style={styles.hospitalContainer}>
+              <IconButton icon="hospital-building" size={20} />
+              <View>
+                <Text variant="bodyMedium">{doctor.hospital}</Text>
+                <Text variant="bodySmall">{doctor.address}</Text>
+              </View>
             </View>
-            {doctor.availability && doctor.availability.length > 0 ? (
-              <View style={styles.availabilityContainer}>
-                {doctor.availability.map((item, index) => (
-                  <View key={index} style={styles.availabilityItem}>
-                    <Text variant="titleSmall" style={styles.dayText}>
-                      {item.day}:
+          </Card.Content>
+        </Card>
+
+        <Card style={styles.section}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Book Appointment
+            </Text>
+            <Text variant="bodyMedium" style={styles.appointmentSubtitle}>
+              Select Date
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.dateList}>
+                {dateOptions.map((dateOption) => (
+                  <TouchableOpacity
+                    key={dateOption.id}
+                    style={[
+                      styles.dateItem,
+                      selectedDate === dateOption.date && {
+                        backgroundColor: theme.colors.primaryContainer,
+                      },
+                    ]}
+                    onPress={() => setSelectedDate(dateOption.date)}>
+                    <Text
+                      style={[
+                        styles.dateDay,
+                        selectedDate === dateOption.date && {
+                          color: theme.colors.primary,
+                        },
+                      ]}>
+                      {dateOption.day}
                     </Text>
-                    <View style={styles.slotsContainer}>
-                      {item.slots.slice(0, 3).map((slot, slotIndex) => (
-                        <Chip
-                          key={slotIndex}
-                          style={styles.slotChip}
-                          mode="outlined"
-                          disabled={slot.isBooked}>
-                          {`${slot.startTime} - ${slot.endTime}`}
-                        </Chip>
-                      ))}
-                      {item.slots.length > 3 && (
-                        <Text variant="bodySmall" style={styles.moreSlotsText}>
-                          +{item.slots.length - 3} more slots
-                        </Text>
-                      )}
-                    </View>
-                  </View>
+                    <Text
+                      style={[
+                        styles.dateNum,
+                        selectedDate === dateOption.date && {
+                          color: theme.colors.primary,
+                        },
+                      ]}>
+                      {dateOption.dateNum}
+                    </Text>
+                  </TouchableOpacity>
                 ))}
               </View>
-            ) : (
-              <Text variant="bodyMedium" style={styles.noAvailabilityText}>
-                No availability information
-              </Text>
-            )}
-          </View>
-        </Card.Content>
-      </Card>
+            </ScrollView>
 
-      <Button
-        mode="contained"
-        icon="calendar-check"
-        onPress={handleBookAppointment}
-        style={styles.bottomBookButton}
-        contentStyle={styles.bookButtonContent}>
-        Book Appointment
-      </Button>
-    </ScrollView>
+            <Text variant="bodyMedium" style={styles.appointmentSubtitle}>
+              Available Time Slots
+            </Text>
+            <View style={styles.timeSlotList}>
+              {timeSlots.map((slot) => (
+                <TouchableOpacity
+                  key={slot.id}
+                  style={[
+                    styles.timeSlot,
+                    !slot.available && styles.unavailableSlot,
+                    selectedSlot?.id === slot.id && {
+                      backgroundColor: theme.colors.primaryContainer,
+                    },
+                  ]}
+                  disabled={!slot.available}
+                  onPress={() => setSelectedSlot(slot)}>
+                  <Text
+                    style={[
+                      styles.timeSlotText,
+                      !slot.available && styles.unavailableText,
+                      selectedSlot?.id === slot.id && {
+                        color: theme.colors.primary,
+                      },
+                    ]}>
+                    {slot.time}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Card.Content>
+        </Card>
+      </ScrollView>
+
+      <Surface style={styles.footer} elevation={4}>
+        <View style={styles.footerContent}>
+          <View>
+            <Text variant="titleMedium">${doctor.fees}</Text>
+            <Text variant="bodySmall">Consultation Fee</Text>
+          </View>
+          <Button
+            mode="contained"
+            onPress={() => setBookingVisible(true)}
+            style={styles.bookButton}>
+            Book Appointment
+          </Button>
+        </View>
+      </Surface>
+
+      <Portal>
+        <Modal
+          visible={bookingVisible}
+          onDismiss={() => setBookingVisible(false)}
+          contentContainerStyle={styles.modalContainer}>
+          <Text variant="titleLarge" style={styles.modalTitle}>
+            Confirm Appointment
+          </Text>
+          <Text variant="bodyMedium" style={styles.modalSubtitle}>
+            {doctor.name} - {doctor.specialization}
+          </Text>
+          <Divider style={styles.modalDivider} />
+          <View style={styles.appointmentDetails}>
+            <View style={styles.appointmentDetailItem}>
+              <IconButton icon="calendar" size={20} />
+              <Text variant="bodyMedium">
+                {new Date(selectedDate).toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </Text>
+            </View>
+            <View style={styles.appointmentDetailItem}>
+              <IconButton icon="clock-outline" size={20} />
+              <Text variant="bodyMedium">{selectedSlot?.time || 'No time selected'}</Text>
+            </View>
+            <View style={styles.appointmentDetailItem}>
+              <IconButton icon="cash" size={20} />
+              <Text variant="bodyMedium">${doctor.fees} Consultation Fee</Text>
+            </View>
+          </View>
+          <TextInput
+            label="Reason for Visit"
+            value={bookingReason}
+            onChangeText={setBookingReason}
+            mode="outlined"
+            multiline
+            numberOfLines={3}
+            style={styles.reasonInput}
+          />
+          <View style={styles.modalActions}>
+            <Button
+              mode="outlined"
+              onPress={() => setBookingVisible(false)}
+              style={styles.modalButton}>
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              onPress={handleBookAppointment}
+              loading={bookingLoading}
+              disabled={bookingLoading}
+              style={styles.modalButton}>
+              Confirm Booking
+            </Button>
+          </View>
+        </Modal>
+      </Portal>
+    </SafeAreaView>
   );
 };
 
@@ -244,56 +513,30 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
     padding: 16,
   },
   errorText: {
-    fontSize: 16,
-    marginVertical: 16,
-    textAlign: 'center',
-  },
-  errorButton: {
-    marginTop: 16,
-  },
-  headerContainer: {
-    padding: 16,
-    marginHorizontal: 16,
-    marginTop: 16,
     marginBottom: 16,
-    borderRadius: 12,
+    color: '#ff0000',
+  },
+  header: {
+    padding: 16,
+    backgroundColor: '#fff',
+    marginBottom: 8,
   },
   profileHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  avatar: {
-    marginRight: 16,
-  },
-  doctorInfo: {
+  profileInfo: {
+    marginLeft: 16,
     flex: 1,
-    justifyContent: 'center',
-  },
-  doctorName: {
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  specialtyText: {
-    marginBottom: 8,
-    color: '#333',
-  },
-  qualificationChip: {
-    alignSelf: 'flex-start',
-    marginBottom: 8,
   },
   ratingContainer: {
     flexDirection: 'row',
@@ -302,79 +545,140 @@ const styles = StyleSheet.create({
   },
   ratingIcon: {
     margin: 0,
-    marginRight: -4,
+    marginLeft: -8,
   },
-  ratingText: {
-    fontWeight: 'bold',
-    marginRight: 4,
-  },
-  reviewText: {
-    color: '#666',
-  },
-  bookButton: {
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 12,
     marginTop: 8,
+    backgroundColor: '#f8f8f8',
+    borderRadius: 8,
   },
-  detailsCard: {
+  statItem: {
+    alignItems: 'center',
+  },
+  verticalDivider: {
+    height: '100%',
+    width: 1,
+    backgroundColor: '#e0e0e0',
+  },
+  section: {
     marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 12,
-  },
-  detailSection: {
     marginVertical: 8,
   },
-  detailHeader: {
+  sectionTitle: {
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  bioText: {
+    lineHeight: 22,
+  },
+  educationItem: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
   },
-  divider: {
-    marginVertical: 16,
+  hospitalContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
   },
-  aboutText: {
-    lineHeight: 20,
-    paddingHorizontal: 8,
-  },
-  locationText: {
-    paddingHorizontal: 8,
-  },
-  feeText: {
-    color: '#4CAF50',
-    fontWeight: 'bold',
-    paddingHorizontal: 8,
-  },
-  availabilityContainer: {
-    paddingHorizontal: 8,
-  },
-  availabilityItem: {
-    marginBottom: 12,
-  },
-  dayText: {
-    fontWeight: 'bold',
+  appointmentSubtitle: {
+    marginTop: 16,
     marginBottom: 8,
+    fontWeight: 'bold',
   },
-  slotsContainer: {
+  dateList: {
+    flexDirection: 'row',
+    marginVertical: 8,
+  },
+  dateItem: {
+    width: 60,
+    height: 70,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+    marginRight: 12,
+    backgroundColor: '#f0f0f0',
+  },
+  dateDay: {
+    fontSize: 14,
+  },
+  dateNum: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 4,
+  },
+  timeSlotList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    marginVertical: 8,
   },
-  slotChip: {
-    margin: 4,
+  timeSlot: {
+    width: '30%',
+    paddingVertical: 12,
+    marginRight: '3%',
+    marginBottom: 12,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
   },
-  moreSlotsText: {
-    margin: 8,
+  unavailableSlot: {
+    backgroundColor: '#f5f5f5',
+    opacity: 0.6,
+  },
+  timeSlotText: {
+    fontWeight: '500',
+  },
+  unavailableText: {
+    color: '#aaa',
+  },
+  footer: {
+    padding: 16,
+    backgroundColor: '#fff',
+  },
+  footerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bookButton: {
+    paddingHorizontal: 16,
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    padding: 20,
+    margin: 20,
+    borderRadius: 8,
+  },
+  modalTitle: {
+    fontWeight: 'bold',
+  },
+  modalSubtitle: {
+    marginTop: 4,
     color: '#666',
   },
-  noAvailabilityText: {
-    fontStyle: 'italic',
-    color: '#666',
-    paddingHorizontal: 8,
+  modalDivider: {
+    marginVertical: 16,
   },
-  bottomBookButton: {
-    marginHorizontal: 16,
-    marginBottom: 24,
-    marginTop: 8,
+  appointmentDetails: {
+    marginBottom: 16,
   },
-  bookButtonContent: {
-    paddingVertical: 8,
+  appointmentDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  reasonInput: {
+    marginVertical: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 16,
+  },
+  modalButton: {
+    marginLeft: 8,
   },
 });
 

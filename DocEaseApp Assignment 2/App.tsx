@@ -7,12 +7,12 @@
 
 import React from 'react';
 import {SafeAreaView, StatusBar, StyleSheet} from 'react-native';
-import {PaperProvider, MD3LightTheme} from 'react-native-paper';
-import AppNavigator from './src/navigation/AppNavigator';
+import { Provider as PaperProvider } from 'react-native-paper';
+import { AppNavigator } from './src/navigation/AppNavigator';
 
 const App = () => {
   return (
-    <PaperProvider theme={MD3LightTheme}>
+    <PaperProvider>
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
         <AppNavigator />

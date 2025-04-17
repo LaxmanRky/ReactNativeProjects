@@ -1,9 +1,8 @@
-// Import React Native Firebase modules
 import firebase from '@react-native-firebase/app';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
+import '@react-native-firebase/auth';
+import '@react-native-firebase/firestore';
 
-// Your web app's Firebase configuration
+// Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyArnJih0j6AapYJ4aufo-V7aK_dm6-6VIQ",
   authDomain: "docease-bb734.firebaseapp.com",
@@ -15,11 +14,17 @@ const firebaseConfig = {
   measurementId: "G-SHVZQRYPYJ"
 };
 
-// Initialize Firebase if it hasn't been initialized already
+// Initialize Firebase if it's not already initialized
 if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
+  try {
+    firebase.initializeApp(firebaseConfig);
+    console.log('Firebase initialized successfully');
+  } catch (error) {
+    console.error('Firebase initialization error:', error);
+  }
 }
 
-// Export the modules for use throughout the app
-export { auth, firestore };
-export default firebase; 
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+export { auth, db };

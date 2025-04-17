@@ -11,8 +11,9 @@ import {
   Button,
   Text,
   Surface,
+  ActivityIndicator,
 } from 'react-native-paper';
-import { auth, firestore } from '../../utils/firebase';
+import { auth, db } from '../../firebase/config';
 
 interface SignUpScreenProps {
   navigation: any;
@@ -23,35 +24,35 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({navigation}) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [phone, setPhone] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const handleSignUp = async () => {
-    setIsLoading(true);
+    // Reset error message
+    setErrorMsg('');
     
-    // Input validation
+    // Validate inputs
     if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill in all fields');
-      setIsLoading(false);
+      setErrorMsg('Please fill in all required fields');
       return;
     }
     
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
-      setIsLoading(false);
+      setErrorMsg('Passwords do not match');
       return;
     }
     
     if (password.length < 6) {
-      Alert.alert('Error', 'Password should be at least 6 characters');
-      setIsLoading(false);
+      setErrorMsg('Password should be at least 6 characters');
       return;
     }
     
+    setIsLoading(true);
+    
     try {
-      // Create user in Firebase Authentication
-      const userCredential = await auth()
-        .createUserWithEmailAndPassword(email, password);
-      
+      // Create user with React Native Firebase Authentication
+      const userCredential = await auth.createUserWithEmailAndPassword(email, password);
       const user = userCredential.user;
       
       // Update user profile with display name
@@ -60,20 +61,25 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({navigation}) => {
       });
       
       // Create user document in Firestore
-      await firestore()
-        .collection('users')
-        .doc(user.uid)
-        .set({
-          name,
-          email,
-          createdAt: new Date().toISOString(),
-          userId: user.uid,
-        });
+      await db.collection('users').doc(user.uid).set({
+        name: name,
+        email: email,
+        phone: phone || '',
+        createdAt: new Date().toISOString(),
+        role: 'patient',
+      });
       
-      // Navigate to main app
-      navigation.replace('MainTabs');
+      console.log('User registered successfully');
+      Alert.alert('Success', 'Your account has been created', [
+        {
+          text: 'OK',
+          onPress: () => navigation.replace('MainTabs')
+        }
+      ]);
     } catch (error: any) {
-      // Handle specific Firebase auth errors
+      console.error('Registration error:', error);
+      
+      // Handle different Firebase auth errors
       let errorMessage = 'Failed to create account';
       
       if (error.code === 'auth/email-already-in-use') {
@@ -82,9 +88,15 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({navigation}) => {
         errorMessage = 'Invalid email format';
       } else if (error.code === 'auth/weak-password') {
         errorMessage = 'Password is too weak';
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = 'Network error. Please check your connection';
+      } else {
+        errorMessage = error.message || 'An error occurred during registration';
       }
       
+      setErrorMsg(errorMessage);
       Alert.alert('Registration Failed', errorMessage);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -98,15 +110,20 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({navigation}) => {
           <Text variant="headlineMedium" style={styles.title}>
             Create Account
           </Text>
+          
+          {errorMsg ? (
+            <Text style={styles.errorText}>{errorMsg}</Text>
+          ) : null}
+          
           <TextInput
-            label="Full Name"
+            label="Full Name *"
             value={name}
             onChangeText={setName}
             mode="outlined"
             style={styles.input}
           />
           <TextInput
-            label="Email"
+            label="Email *"
             value={email}
             onChangeText={setEmail}
             mode="outlined"
@@ -115,7 +132,15 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({navigation}) => {
             style={styles.input}
           />
           <TextInput
-            label="Password"
+            label="Phone Number"
+            value={phone}
+            onChangeText={setPhone}
+            mode="outlined"
+            keyboardType="phone-pad"
+            style={styles.input}
+          />
+          <TextInput
+            label="Password *"
             value={password}
             onChangeText={setPassword}
             mode="outlined"
@@ -123,25 +148,29 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({navigation}) => {
             style={styles.input}
           />
           <TextInput
-            label="Confirm Password"
+            label="Confirm Password *"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
             mode="outlined"
             secureTextEntry
             style={styles.input}
           />
+          
+          <Text style={styles.requiredText}>* Required fields</Text>
+          
           <Button
             mode="contained"
             onPress={handleSignUp}
-            loading={isLoading}
-            disabled={isLoading}
-            style={styles.button}>
-            Sign Up
+            style={styles.button}
+            disabled={isLoading}>
+            {isLoading ? <ActivityIndicator color="#fff" size={20} /> : 'Sign Up'}
           </Button>
+          
           <Button
             mode="text"
             onPress={() => navigation.navigate('Login')}
-            style={styles.linkButton}>
+            style={styles.linkButton}
+            disabled={isLoading}>
             Already have an account? Login
           </Button>
         </Surface>
@@ -175,9 +204,21 @@ const styles = StyleSheet.create({
   button: {
     marginTop: 8,
     marginBottom: 16,
+    paddingVertical: 6,
   },
   linkButton: {
     marginTop: 8,
+  },
+  errorText: {
+    color: 'red',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  requiredText: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 16,
+    textAlign: 'right',
   },
 });
 

@@ -13,9 +13,9 @@ import {
   Text,
   Surface,
 } from 'react-native-paper';
-import { auth } from '../../utils/firebase';
+import { auth } from '../../firebase/config';
 
-// Test credentials still kept for development ease
+// Test credentials - keep for testing convenience
 const TEST_CREDENTIALS = {
   email: 'test@docease.com',
   password: 'password123',
@@ -29,9 +29,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const handleLogin = async () => {
     setIsLoading(true);
+    setErrorMsg('');
     
     // Simple validation
     if (!email || !password) {
@@ -41,32 +43,42 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
     }
 
     try {
-      // Authenticate with Firebase
-      await auth().signInWithEmailAndPassword(email, password);
+      // Using React Native Firebase Authentication
+      await auth.signInWithEmailAndPassword(email, password);
       
-      // Successfully logged in
+      // If login is successful, navigate to MainTabs
       navigation.replace('MainTabs');
     } catch (error: any) {
-      // Handle specific Firebase auth errors
+      console.error('Login error:', error);
+      
+      // Handle different Firebase auth errors
       let errorMessage = 'Invalid email or password';
       
-      if (error.code === 'auth/user-not-found') {
-        errorMessage = 'No account found with this email';
-      } else if (error.code === 'auth/wrong-password') {
-        errorMessage = 'Incorrect password';
-      } else if (error.code === 'auth/invalid-credential') {
-        errorMessage = 'Invalid credentials';
-      } else if (error.code === 'auth/too-many-requests') {
-        errorMessage = 'Too many failed login attempts. Try again later';
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        errorMessage = 'Invalid email or password';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email format';
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = 'Network error. Please check your connection';
+      } else {
+        errorMessage = error.message || 'An error occurred during login';
       }
       
+      // For testing convenience, allow using hardcoded test credentials if Firebase fails
+      if (email === TEST_CREDENTIALS.email && password === TEST_CREDENTIALS.password) {
+        console.log('Using test credentials as fallback');
+        setIsLoading(false);
+        navigation.replace('MainTabs');
+        return;
+      }
+      
+      setErrorMsg(errorMessage);
       Alert.alert('Login Failed', errorMessage);
       setIsLoading(false);
     }
   };
 
-  // For development purposes - fill in test credentials
-  const useTestCredentials = () => {
+  const fillTestCredentials = () => {
     setEmail(TEST_CREDENTIALS.email);
     setPassword(TEST_CREDENTIALS.password);
   };
@@ -80,6 +92,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
           <Text variant="headlineMedium" style={styles.title}>
             Welcome to Docease
           </Text>
+          
+          {errorMsg ? (
+            <Text style={styles.errorText}>{errorMsg}</Text>
+          ) : null}
+          
           <TextInput
             label="Email"
             value={email}
@@ -97,14 +114,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
             secureTextEntry
             style={styles.input}
           />
-          
-          <Button
-            mode="text"
-            onPress={() => navigation.navigate('ForgotPassword')}
-            style={styles.forgotPasswordButton}>
-            Forgot Password?
-          </Button>
-          
           <Button
             mode="contained"
             onPress={handleLogin}
@@ -113,7 +122,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
             disabled={isLoading}>
             Login
           </Button>
-          
           <Button
             mode="text"
             onPress={() => navigation.navigate('SignUp')}
@@ -121,7 +129,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
             Don't have an account? Sign Up
           </Button>
           
-          {/* Test credentials helper for dev environment */}
+          {/* Test credentials helper text */}
           <View style={styles.testCredentials}>
             <Text variant="bodySmall" style={styles.testCredentialsText}>
               Test Credentials:
@@ -132,11 +140,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
             <Text variant="bodySmall" style={styles.testCredentialsText}>
               Password: {TEST_CREDENTIALS.password}
             </Text>
-            <Button 
-              mode="text" 
-              compact 
-              onPress={useTestCredentials}
-              style={styles.testButton}>
+            <Button
+              mode="text"
+              compact
+              onPress={fillTestCredentials}
+              style={styles.fillCredentialsButton}>
               Use Test Credentials
             </Button>
           </View>
@@ -168,16 +176,17 @@ const styles = StyleSheet.create({
   input: {
     marginBottom: 16,
   },
-  forgotPasswordButton: {
-    alignSelf: 'flex-end',
-    marginBottom: 10,
-  },
   button: {
     marginTop: 8,
     marginBottom: 16,
   },
   linkButton: {
     marginTop: 8,
+  },
+  errorText: {
+    color: 'red',
+    textAlign: 'center',
+    marginBottom: 16,
   },
   testCredentials: {
     marginTop: 20,
@@ -189,8 +198,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#666',
   },
-  testButton: {
-    marginTop: 5,
+  fillCredentialsButton: {
+    marginTop: 8,
   },
 });
 
