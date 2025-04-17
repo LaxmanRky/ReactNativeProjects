@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useLayoutEffect } from 'react';
 import { View, StyleSheet, Text, ScrollView } from 'react-native';
-import { TextInput, Button } from 'react-native-paper';
+import { TextInput, Button, IconButton } from 'react-native-paper';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NavigationProp, RootStackParamList } from '../types/navigation';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -17,6 +17,20 @@ export const BookAppointmentScreen: React.FC = () => {
     reason: '',
     timeSlot: '12:00 PM',
   });
+
+  // Add custom back button to header
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <IconButton
+          icon="arrow-left"
+          size={24}
+          onPress={() => navigation.goBack()}
+          style={{ marginLeft: -8 }}
+        />
+      ),
+    });
+  }, [navigation]);
 
   // Check if route.params exists and has doctor data
   if (!route.params?.doctor) {

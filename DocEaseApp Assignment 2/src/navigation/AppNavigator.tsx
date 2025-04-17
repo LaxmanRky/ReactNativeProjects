@@ -23,7 +23,8 @@ const Tab = createBottomTabNavigator();
 const TabNavigator = () => {
   return (
     <Tab.Navigator
-      screenOptions={({ route: _route }) => ({
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      screenOptions={({ route }) => ({
         tabBarActiveTintColor: '#6200ee',
         tabBarInactiveTintColor: 'gray',
         tabBarLabelStyle: {
@@ -83,6 +84,7 @@ export const AppNavigator = () => {
           headerTitleStyle: {
             fontWeight: 'bold',
           },
+          headerBackVisible: true,
         }}
       >
         <Stack.Screen 
@@ -93,7 +95,11 @@ export const AppNavigator = () => {
         <Stack.Screen 
           name="SignUp" 
           component={SignUpScreen} 
-          options={{ headerShown: false }} 
+          options={{ 
+            headerShown: true,
+            title: 'Sign Up',
+            headerTransparent: true,
+          }} 
         />
         <Stack.Screen
           name="MainTabs"
@@ -113,6 +119,7 @@ export const AppNavigator = () => {
           options={{
             title: 'Book Appointment',
             presentation: 'modal',
+            headerBackVisible: true,
           }}
         />
       </Stack.Navigator>

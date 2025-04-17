@@ -4,7 +4,10 @@ export type RootStackParamList = {
   Home: undefined;
   Login: undefined;
   SignUp: undefined;
-  MainTabs: undefined;
+  MainTabs: {
+    screen?: string;
+    initial?: boolean;
+  };
   DoctorDetails: {
     doctorId: string;
   };

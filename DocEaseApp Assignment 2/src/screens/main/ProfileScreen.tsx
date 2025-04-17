@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { StyleSheet, ScrollView, View, Alert } from 'react-native';
 import {
   Text,
@@ -43,6 +43,20 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({navigation}) => {
   const [editField, setEditField] = useState<keyof UserData | null>(null);
   const [editValue, setEditValue] = useState('');
   const [savingData, setSavingData] = useState(false);
+
+  // Add custom back button to header
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerLeft: () => (
+        <IconButton
+          icon="arrow-left"
+          size={24}
+          onPress={() => navigation.goBack()}
+          style={{ marginLeft: -8 }}
+        />
+      ),
+    });
+  }, [navigation]);
 
   // Wrapping fetchUserData in useCallback to prevent infinite loops
   const fetchUserData = React.useCallback(async () => {

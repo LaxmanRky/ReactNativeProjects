@@ -1,6 +1,5 @@
 import React, {useState} from 'react';
 import {
-  View,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -14,12 +13,6 @@ import {
   Surface,
 } from 'react-native-paper';
 import { auth } from '../../firebase/config';
-
-// Test credentials - keep for testing convenience
-const TEST_CREDENTIALS = {
-  email: 'test@docease.com',
-  password: 'password123',
-};
 
 interface LoginScreenProps {
   navigation: any;
@@ -64,23 +57,39 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
         errorMessage = error.message || 'An error occurred during login';
       }
       
-      // For testing convenience, allow using hardcoded test credentials if Firebase fails
-      if (email === TEST_CREDENTIALS.email && password === TEST_CREDENTIALS.password) {
-        console.log('Using test credentials as fallback');
-        setIsLoading(false);
-        navigation.replace('MainTabs');
-        return;
-      }
-      
       setErrorMsg(errorMessage);
       Alert.alert('Login Failed', errorMessage);
       setIsLoading(false);
     }
   };
 
-  const fillTestCredentials = () => {
-    setEmail(TEST_CREDENTIALS.email);
-    setPassword(TEST_CREDENTIALS.password);
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert('Email Required', 'Please enter your email address to reset your password');
+      return;
+    }
+
+    try {
+      await auth.sendPasswordResetEmail(email);
+      Alert.alert(
+        'Password Reset Email Sent',
+        'Check your email for instructions to reset your password'
+      );
+    } catch (error: any) {
+      console.error('Password reset error:', error);
+      
+      let errorMessage = 'Failed to send password reset email';
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email address';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email format';
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = 'Network error. Please check your connection';
+      }
+      
+      Alert.alert('Error', errorMessage);
+    }
   };
 
   return (
@@ -124,30 +133,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
           </Button>
           <Button
             mode="text"
+            onPress={handleForgotPassword}
+            style={styles.forgotPasswordButton}>
+            Forgot Password?
+          </Button>
+          <Button
+            mode="text"
             onPress={() => navigation.navigate('SignUp')}
             style={styles.linkButton}>
             Don't have an account? Sign Up
           </Button>
-          
-          {/* Test credentials helper text */}
-          <View style={styles.testCredentials}>
-            <Text variant="bodySmall" style={styles.testCredentialsText}>
-              Test Credentials:
-            </Text>
-            <Text variant="bodySmall" style={styles.testCredentialsText}>
-              Email: {TEST_CREDENTIALS.email}
-            </Text>
-            <Text variant="bodySmall" style={styles.testCredentialsText}>
-              Password: {TEST_CREDENTIALS.password}
-            </Text>
-            <Button
-              mode="text"
-              compact
-              onPress={fillTestCredentials}
-              style={styles.fillCredentialsButton}>
-              Use Test Credentials
-            </Button>
-          </View>
         </Surface>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -180,6 +175,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 16,
   },
+  forgotPasswordButton: {
+    marginBottom: 8,
+  },
   linkButton: {
     marginTop: 8,
   },
@@ -187,19 +185,6 @@ const styles = StyleSheet.create({
     color: 'red',
     textAlign: 'center',
     marginBottom: 16,
-  },
-  testCredentials: {
-    marginTop: 20,
-    padding: 10,
-    backgroundColor: '#f0f0f0',
-    borderRadius: 5,
-  },
-  testCredentialsText: {
-    textAlign: 'center',
-    color: '#666',
-  },
-  fillCredentialsButton: {
-    marginTop: 8,
   },
 });
 

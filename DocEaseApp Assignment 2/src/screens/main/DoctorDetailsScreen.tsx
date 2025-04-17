@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -21,7 +21,7 @@ import {
   TextInput,
   Card,
 } from 'react-native-paper';
-import { auth } from '../../firebase/config';
+import { auth, db } from '../../firebase/config';
 
 interface DoctorDetailsScreenProps {
   route: {
@@ -155,6 +155,13 @@ const DoctorDetailsScreen: React.FC<DoctorDetailsScreenProps> = ({
   
   const theme = useTheme();
 
+  // Set up the header with a back button
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      // Remove custom back button as it's causing duplication with default back button
+    });
+  }, [navigation]);
+
   // Generate next 5 days for date selection
   const dateOptions = [...Array(5)].map((_, i) => {
     const date = new Date();
@@ -238,21 +245,89 @@ const DoctorDetailsScreen: React.FC<DoctorDetailsScreenProps> = ({
 
     setBookingLoading(true);
     
-    // Simulate booking process
-    setTimeout(() => {
+    try {
+      // Create appointment data
+      if (!doctor) {
+        throw new Error('Doctor information is missing');
+      }
+      
+      console.log('Starting appointment booking process...');
+      
+      // Get current user information
+      const currentUser = auth.currentUser;
+      const userEmail = currentUser.email || '';
+      const displayName = currentUser.displayName || 'Patient';
+      const userId = currentUser.uid;
+      
+      // Create a detailed appointment object
+      const appointmentData = {
+        doctorId: doctor.id,
+        doctorName: doctor.name,
+        department: doctor.specialization, // Using specialization as department
+        patientName: displayName,
+        phoneNumber: '', // This would need to be collected in a real app
+        email: userEmail,
+        appointmentDate: selectedDate,
+        timeSlot: selectedSlot.time,
+        reason: bookingReason || 'General consultation',
+        appointmentType: 'in-person', // Default type
+        online: false,
+      };
+      
+      console.log('Appointment data prepared:', appointmentData);
+      
+      // Prepare the appointment with user metadata
+      const appointmentWithMetadata = {
+        ...appointmentData,
+        userId: userId,
+        userEmail: userEmail,
+        createdAt: new Date().toISOString(),
+        status: 'pending',
+        lastUpdated: new Date().toISOString(),
+      };
+      
+      // Store in user-specific subcollection
+      console.log(`Saving to user's appointments collection for user ID: ${userId}...`);
+      const userAppointmentsRef = db.collection('users').doc(userId).collection('appointments');
+      const docRef = await userAppointmentsRef.add(appointmentWithMetadata);
+      console.log('Saved to user\'s appointments with ID:', docRef.id);
+      
+      // Also store in global appointments collection with reference to user appointment
+      console.log('Saving to global appointments collection...');
+      const globalAppointmentsRef = db.collection('appointments');
+      await globalAppointmentsRef.add({
+        ...appointmentWithMetadata,
+        appointmentId: docRef.id,
+        userRef: db.collection('users').doc(userId)
+      });
+      console.log('Saved to global appointments collection successfully');
+      
+      // Update the doctor's availability if needed (could be implemented in the future)
+      
       setBookingVisible(false);
       Alert.alert(
         'Appointment Booked',
-        `Your appointment with ${doctor?.name} has been booked for ${selectedDate} at ${selectedSlot.time}.`,
+        `Your appointment with ${doctor.name} has been booked for ${selectedDate} at ${selectedSlot.time}.`,
         [
           {
             text: 'OK',
-            onPress: () => navigation.goBack(),
+            onPress: () => {
+              console.log('Navigating to Appointments screen after booking');
+              // Navigate to the Appointments tab to show the newly booked appointment
+              navigation.navigate('MainTabs', { 
+                screen: 'Appointments',
+                initial: false
+              });
+            },
           },
         ]
       );
+    } catch (error) {
+      console.error('Error booking appointment:', error);
+      Alert.alert('Error', 'There was a problem booking your appointment. Please try again.');
+    } finally {
       setBookingLoading(false);
-    }, 1000);
+    }
   };
 
   if (loading) {
